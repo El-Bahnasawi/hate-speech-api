@@ -2,27 +2,23 @@ from flask import Flask, request, jsonify
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import wandb
+import os
 
 app = Flask(__name__)
 
-# =====================
-# Load Model from W&B
-# =====================
+# ✅ W&B: Download model artifact
 run = wandb.init(project="bertweet-lora-bayes-v2", job_type="inference", anonymous="allow")
-
-# Download artifact from W&B
 artifact = run.use_artifact("medoxz543-zewail-city-of-science-and-technology/bertweet-lora-bayes-v2/final_model:v5", type="model")
 artifact_dir = artifact.download()
 
-# Load tokenizer + model
+# ✅ Load tokenizer + model from the artifact
 tokenizer = AutoTokenizer.from_pretrained(artifact_dir)
 model = AutoModelForSequenceClassification.from_pretrained(artifact_dir)
 model.eval()
 
-
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-    return "🚀 Hate Speech Detection API is Live (via W&B Artifacts)!"
+    return jsonify({"message": "🚀 Hate Speech Detection API (W&B) is live!"})
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -32,7 +28,7 @@ def predict():
     if not text:
         return jsonify({"error": "No input text provided."}), 400
 
-    inputs = tokenizer(text, return_tensors="pt")
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
         outputs = model(**inputs)
         probs = torch.softmax(outputs.logits, dim=-1)
@@ -43,5 +39,6 @@ def predict():
         "label": "Hateful" if hate_prob > 0.5 else "Not Hateful"
     })
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+# 👇 Required by Vercel for serverless execution
+def handler(environ, start_response):
+    return app(environ, start_response)
