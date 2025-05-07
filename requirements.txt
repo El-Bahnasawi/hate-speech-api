@@ -1,4 +1,7 @@
 flask
+flask-cors
 torch
 transformers
 wandb
+sentencepiece
+accelerate
