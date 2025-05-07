@@ -1,73 +1,63 @@
-"""
-AI-powered hate-speech checker for Render
-----------------------------------------
-Expects POST /check-text  { "texts": ["str1", "str2", ...] }
-Returns [{ "blur": bool, "score": float }, ...]
-"""
 import os
 import torch
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import wandb
-import psycopg2
-from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
-# ---------------- Environment ---------------- #
-DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# ---------------- Model bootstrap (runs once) ---------------- #
+# Load model from Weights & Biases
 run = wandb.init(project="inference", job_type="deploy", anonymous="allow")
 artifact = run.use_artifact(
     "medoxz543-zewail-city-of-science-and-technology/bertweet-lora-bayes-v2/final_model:v5",
     type="model"
 )
 model_dir = artifact.download()
-
-tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base", normalization=True)
+tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
 model = AutoModelForSequenceClassification.from_pretrained(model_dir).to(DEVICE)
 model.eval()
 
-# ---------------- Flask app ---------------- #
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# ---------------- Logging function ---------------- #
+# Supabase logging using REST API
 def log_to_db(texts, results):
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cursor = conn.cursor()
-        for text, result in zip(texts, results):
-            cursor.execute(
-                """
-                INSERT INTO cases (text, blur, score)
-                VALUES (%s, %s, %s)
-                """,
-                (text, result["blur"], result["score"])
-            )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        print("\U0001F4E5 Logged to Supabase DB.")
-    except Exception as e:
-        print("\u274C Logging error:", e)
+    url = f"{SUPABASE_URL}/rest/v1/cases"
+    headers = {
+        "apikey": SUPABASE_API_KEY,
+        "Authorization": f"Bearer {SUPABASE_API_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
 
-# ---------------- Inference endpoint ---------------- #
+    data = [
+        {"text": text, "blur": result["blur"], "score": result["score"]}
+        for text, result in zip(texts, results)
+    ]
+
+    try:
+        response = requests.post(url, json=data, headers=headers)
+        if response.status_code in (200, 201, 204):
+            print("📥 Logged to Supabase via REST.")
+        else:
+            print(f"❌ Supabase log failed ({response.status_code}):", response.text)
+    except Exception as e:
+        print("❌ Exception during Supabase logging:", e)
+
 @app.route("/check-text", methods=["POST"])
 @torch.no_grad()
 def check_text():
     texts = request.get_json().get("texts", [])
-
     if not texts:
-        print("\u26A0\ufe0f No texts received in POST request.")
         return jsonify([])
-
-    print(f"\U0001F4E9 Received {len(texts)} texts for prediction.")
 
     encodings = tokenizer(
         texts,
@@ -78,7 +68,7 @@ def check_text():
     ).to(DEVICE)
 
     logits = model(**encodings).logits
-    probs = logits.softmax(dim=-1)[:, 1]  # class 1 = hateful
+    probs = logits.softmax(dim=-1)[:, 1]
     scores = probs.cpu().numpy().tolist()
 
     results = [
@@ -86,28 +76,14 @@ def check_text():
         for s in scores
     ]
 
-    print("\U0001F9E0 Predictions ready. Logging to DB...")
     log_to_db(texts, results)
-    print("\u2705 Response ready.")
     return jsonify(results)
 
-# ---------------- DB test endpoint ---------------- #
 @app.route("/test-db", methods=["GET"])
 def test_db():
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO cases (text, blur, score)
-            VALUES (%s, %s, %s)
-            """,
-            ("\U0001F310 Test insert from Render", False, 0.4321)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"status": "\u2705 Inserted test row into Supabase!"})
+        log_to_db(["Test from /test-db"], [{"blur": False, "score": 0.1111}])
+        return jsonify({"status": "✅ Logged test row via REST."})
     except Exception as e:
         return jsonify({"error": str(e)})
 
