@@ -3,7 +3,9 @@ flask-cors
 torch
 transformers
 wandb
+gunicorn
 sentencepiece
 accelerate
+
 psycopg2-binary
 python-dotenv
