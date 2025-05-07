@@ -2,7 +2,6 @@
 AI-powered hate-speech checker for Render
 ----------------------------------------
 Expects POST /check-text  { "texts": ["str1", "str2", ...] }
-
 Returns [{ "blur": bool, "score": float }, ...]
 """
 import os
@@ -13,9 +12,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import wandb
 import psycopg2
 from datetime import datetime
-
-# Load environment variables (optional: only needed if running locally with a .env file)
 from dotenv import load_dotenv
+
+# Load environment variables
 load_dotenv()
 
 # ---------------- Environment ---------------- #
@@ -54,15 +53,21 @@ def log_to_db(texts, results):
         conn.commit()
         cursor.close()
         conn.close()
-        print("📥 Logged to Supabase DB.")
+        print("\U0001F4E5 Logged to Supabase DB.")
     except Exception as e:
-        print("❌ Logging error:", e)
+        print("\u274C Logging error:", e)
 
 # ---------------- Inference endpoint ---------------- #
 @app.route("/check-text", methods=["POST"])
 @torch.no_grad()
 def check_text():
     texts = request.get_json().get("texts", [])
+
+    if not texts:
+        print("\u26A0\ufe0f No texts received in POST request.")
+        return jsonify([])
+
+    print(f"\U0001F4E9 Received {len(texts)} texts for prediction.")
 
     encodings = tokenizer(
         texts,
@@ -81,9 +86,30 @@ def check_text():
         for s in scores
     ]
 
+    print("\U0001F9E0 Predictions ready. Logging to DB...")
     log_to_db(texts, results)
+    print("\u2705 Response ready.")
     return jsonify(results)
 
+# ---------------- DB test endpoint ---------------- #
+@app.route("/test-db", methods=["GET"])
+def test_db():
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO cases (text, blur, score)
+            VALUES (%s, %s, %s)
+            """,
+            ("\U0001F310 Test insert from Render", False, 0.4321)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"status": "\u2705 Inserted test row into Supabase!"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
 if __name__ == "__main__":
-    # For local testing only. In Render use gunicorn.
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 4000)))
