@@ -4,6 +4,11 @@ from logger import log_to_db
 import torch
 import psutil
 from datetime import datetime
+import threading
+
+def log_async(texts, results):
+    thread = threading.Thread(target=log_to_db, args=(texts, results))
+    thread.start()
 
 def register_routes(app):
 
@@ -50,7 +55,7 @@ def register_routes(app):
 
             db_logged = False
             try:
-                log_to_db(texts, results)
+                log_async(texts, results)
                 db_logged = True
             except Exception as e:
                 print(f"❌ Logging to DB failed: {e}")
