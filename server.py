@@ -24,8 +24,8 @@ app.include_router(router)
 @app.on_event("startup")
 async def startup_event():
     print("🔧 Starting server...")
-    await init_db_pool()
     await load_model()
+    await init_db_pool()
     print("✅ Server is ready!")
 
 @app.on_event("shutdown")

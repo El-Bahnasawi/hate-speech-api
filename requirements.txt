@@ -6,3 +6,4 @@ wandb
 python-dotenv
 asyncpg
 emoji
+psutil
