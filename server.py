@@ -5,7 +5,7 @@ import uvicorn
 from routes import router
 from db_pool import init_db_pool, close_db_pool
 from model_loader import load_model
-from logger import log
+from logger import log_to_db
 
 app = FastAPI()
 
@@ -23,16 +23,16 @@ app.include_router(router)
 
 @app.on_event("startup")
 async def startup_event():
-    log("🔧 Starting server...")
+    print("🔧 Starting server...")
     await init_db_pool()
     await load_model()
-    log("✅ Server is ready!")
+    print("✅ Server is ready!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    log("🧹 Shutting down server...")
+    print("🧹 Shutting down server...")
     await close_db_pool()
-    log("✅ Cleanup complete.")
+    print("✅ Cleanup complete.")
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=4000, reload=True)
