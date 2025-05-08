@@ -8,7 +8,7 @@ import sys
 
 try:
     print("🚀 Starting Flask server...")
-    app = Flask(__name__, debug=True)
+    app = Flask(__name__)
     CORS(app)
 
     try:
