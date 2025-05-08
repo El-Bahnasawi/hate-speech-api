@@ -10,7 +10,10 @@ def log_to_db(texts, results):
         print("Texts:", texts)
         print("Results:", results)
 
-        values = [(text, result["blur"], result["score"]) for text, result in zip(texts, results)]
+        values = [
+            (text, result["blur"], result["score"])
+            for text, result in zip(texts, results)
+        ]
 
         if not values:
             print("⚠️ No values to insert.")
@@ -24,12 +27,23 @@ def log_to_db(texts, results):
         except Exception as e:
             print("❌ Error while executing insert:", e)
 
-        conn.commit()
-        cursor.close()
-        print(f"✅ Bulk inserted {len(values)} rows.")
+        try:
+            conn.commit()
+            print(f"✅ Bulk inserted {len(values)} rows.")
+        except Exception as e:
+            print("❌ Commit failed:", e)
+
+        try:
+            cursor.close()
+        except Exception as e:
+            print("❌ Failed to close cursor:", e)
 
     except Exception as e:
-        print("❌ Logging failed:", e)
+        print("❌ Logging failed (conn/cursor):", e)
+
     finally:
-        if conn:
-            db_pool.putconn(conn)
+        try:
+            if conn:
+                db_pool.putconn(conn)
+        except Exception as e:
+            print("❌ Failed to return connection to pool:", e)
