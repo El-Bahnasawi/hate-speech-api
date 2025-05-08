@@ -1,26 +1,37 @@
-import asyncpg
+# db_pool.py
+"""
+Singleton asyncpg pool.
+Creates exactly one pool on startup, closes it gracefully on shutdown.
+"""
+
 import os
-from dotenv import load_dotenv
+import asyncpg
 
-load_dotenv()
-
-db_pool = None
+DB_URL = os.getenv("DATABASE_URL")         # must include ?sslmode=require
+_pool   = None                             # type: asyncpg.Pool | None
 
 async def init_db_pool():
-    global db_pool
-    print("🔌 Creating PostgreSQL async connection pool...")
-    db_pool = await asyncpg.create_pool(
-        user=os.getenv("user"),
-        password=os.getenv("password"),
-        database=os.getenv("dbname"),
-        host=os.getenv("host"),
-        port=os.getenv("port"),
-        ssl="require"
+    """Call once from FastAPI's startup event."""
+    global _pool
+    if _pool is not None:
+        return
+
+    _pool = await asyncpg.create_pool(
+        dsn=DB_URL,
+        min_size=1,
+        max_size=2,          # free tier ≈ low concurrency
+        timeout=30,          # seconds to obtain a connection
+        command_timeout=60,  # per-statement timeout
     )
-    print("✅ Async connection pool created!")
+    print("✅ DB pool ready")
 
 async def close_db_pool():
-    global db_pool
-    if db_pool:
-        await db_pool.close()
-        print("🧹 DB pool closed.")
+    global _pool
+    if _pool:
+        await _pool.close()
+        _pool = None
+
+# Convenience for other modules
+@property
+def pool():
+    return _pool

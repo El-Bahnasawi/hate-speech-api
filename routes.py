@@ -1,66 +1,45 @@
-import model_loader
-import torch
-import psutil
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+# routes.py
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from datetime import datetime
+
+import torch
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+import model_loader
 from logger import log_to_db
 
 router = APIRouter()
+EXECUTOR = ThreadPoolExecutor(max_workers=2)   # keeps event-loop free
+DEVICE   = model_loader.DEVICE
 
 class TextRequest(BaseModel):
     texts: list[str]
 
+def _predict(batch: list[str]) -> list[float]:
+    """Runs in a worker thread."""
+    enc = model_loader.tokenizer(
+        batch, padding=True, truncation=True, max_length=70, return_tensors="pt"
+    )
+    enc = {k: v.to(DEVICE) for k, v in enc.items()}
+    with torch.no_grad():
+        probs = model_loader.model(**enc).logits.softmax(-1)[:, 1]
+    return probs.cpu().tolist()
+
 @router.post("/check-text")
 async def check_text(payload: TextRequest):
-    print(f"📅 /check-text called at {datetime.now():%Y-%m-%d %H:%M:%S}")
-    texts = payload.texts
-    if not texts:
-        return JSONResponse(status_code=400, content={"error": "No texts provided."})
+    if not payload.texts:
+        raise HTTPException(400, "No texts provided")
 
-    available_mb = psutil.virtual_memory().available / 1024 / 1024
-    print(f"🧠 Available memory: {available_mb:.2f} MB")
+    ts = datetime.utcnow().isoformat(timespec="seconds")
+    scores = await asyncio.get_event_loop().run_in_executor(
+        EXECUTOR, partial(_predict, payload.texts)
+    )
+    results = [{"blur": s >= 0.5, "score": round(s, 4)} for s in scores]
 
-    try:
-        encodings = model_loader.tokenizer(
-            texts,
-            padding=True,
-            truncation=True,
-            max_length=70,
-            return_tensors="pt"
-        ).to(model_loader.DEVICE)
-    except Exception as e:
-        print(f"❌ Tokenization failed: {e}")
-        return JSONResponse(status_code=500, content={"error": "Tokenization error"})
+    # Fire-and-forget logging
+    log_to_db(payload.texts, results)
 
-    try:
-        with torch.no_grad():
-            logits = model_loader.model(**encodings).logits
-            probs = logits.softmax(dim=-1)[:, 1]
-            scores = probs.cpu().numpy().tolist()
-    except Exception as e:
-        print(f"❌ Inference failed: {e}")
-        return JSONResponse(status_code=500, content={"error": "Model inference error"})
-
-    results = [{"blur": s >= 0.5, "score": round(float(s), 4)} for s in scores]
-    print("🚀 Inference results:", results)
-
-    db_logged = False
-    try:
-        await log_to_db(texts, results)
-        db_logged = True
-    except Exception as e:
-        print(f"❌ Logging to DB failed: {e}")
-
-    return {"results": results, "db_logged": db_logged}
-
-@router.get("/test-db")
-async def test_db():
-    print(f"📅 /test-db called at {datetime.now():%Y-%m-%d %H:%M:%S}")
-    try:
-        await log_to_db(["Test from /test-db"], [{"blur": False, "score": 0.1111}])
-        return {"status": "✅ Logged test row via async pg pool."}
-    except Exception as e:
-        print(f"❌ /test-db logging failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    return {"timestamp": ts, "results": results}
