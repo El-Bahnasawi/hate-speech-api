@@ -4,8 +4,6 @@ torch
 transformers
 wandb
 gunicorn
-sentencepiece
-accelerate
-supabase
 python-dotenv
 psycopg2
+emoji
