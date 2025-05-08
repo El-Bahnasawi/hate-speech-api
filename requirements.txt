@@ -8,3 +8,4 @@ sentencepiece
 accelerate
 supabase
 python-dotenv
+psycopg2

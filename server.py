@@ -3,8 +3,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import wandb
-from supabase import create_client, Client
 import os
+import psycopg2
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Setup device
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -24,27 +28,31 @@ model.eval()
 app = Flask(__name__)
 CORS(app)
 
-
-from dotenv import load_dotenv
-
-# Load env variables from a .env file
-load_dotenv()
-
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
-
-# Logging using Supabase Python client
+# Logging using psycopg2 directly
 def log_to_db(texts, results):
     try:
-        data = [
-            {"text": text, "blur": result["blur"], "score": result["score"]}
-            for text, result in zip(texts, results)
-        ]
-        supabase.table("cases").insert(data).execute()
-        print("📥 Logged to Supabase via Python client.")
+        conn = psycopg2.connect(
+            user=os.getenv("user"),
+            password=os.getenv("password"),
+            host=os.getenv("host"),
+            port=os.getenv("port"),
+            dbname=os.getenv("dbname")
+        )
+        cursor = conn.cursor()
+
+        for text, result in zip(texts, results):
+            cursor.execute(
+                "INSERT INTO cases (text, blur, score) VALUES (%s, %s, %s);",
+                (text, result["blur"], result["score"])
+            )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ Logged to Supabase via psycopg2.")
+
     except Exception as e:
-        print("❌ Exception during Supabase logging:", e)
+        print("❌ Logging failed:", e)
 
 @app.route("/check-text", methods=["POST"])
 @torch.no_grad()
@@ -77,7 +85,7 @@ def check_text():
 def test_db():
     try:
         log_to_db(["Test from /test-db"], [{"blur": False, "score": 0.1111}])
-        return jsonify({"status": "✅ Logged test row via supabase-py."})
+        return jsonify({"status": "✅ Logged test row via psycopg2."})
     except Exception as e:
         return jsonify({"error": str(e)})
 
