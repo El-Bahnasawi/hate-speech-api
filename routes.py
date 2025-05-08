@@ -3,6 +3,7 @@ from model_loader import tokenizer, model, DEVICE
 from logger import log_to_db
 import torch
 import psutil
+from datetime import datetime
 
 def register_routes(app):
 
@@ -10,6 +11,7 @@ def register_routes(app):
     @torch.no_grad()
     def check_text():
         try:
+            print(f"📅 /check-text called at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             texts = request.get_json().get("texts", [])
             if not texts:
                 print("⚠️ No texts received.")
@@ -46,12 +48,17 @@ def register_routes(app):
 
             print("🚀 Inference results:", results)
 
+            db_logged = False
             try:
                 log_to_db(texts, results)
+                db_logged = True
             except Exception as e:
                 print(f"❌ Logging to DB failed: {e}")
 
-            return jsonify(results)
+            return jsonify({
+                "results": results,
+                "db_logged": db_logged
+            })
 
         except Exception as e:
             print(f"❌ /check-text route failed: {e}")
@@ -60,6 +67,7 @@ def register_routes(app):
     @app.route("/test-db", methods=["GET"])
     def test_db():
         try:
+            print(f"📅 /test-db called at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             log_to_db(["Test from /test-db"], [{"blur": False, "score": 0.1111}])
             return jsonify({"status": "✅ Logged test row via psycopg2 pool + executemany."})
         except Exception as e:
