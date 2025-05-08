@@ -13,7 +13,8 @@ try:
         password=os.getenv("password"),
         host=os.getenv("host"),
         port=os.getenv("port"),
-        dbname=os.getenv("dbname")
+        dbname=os.getenv("dbname"),
+        sslmode="require"
     )
     if db_pool:
         print("✅ Connection pool created successfully!")
