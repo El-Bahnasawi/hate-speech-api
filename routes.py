@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from model_loader import tokenizer, model, DEVICE
 from logger import log_to_db
@@ -17,8 +18,7 @@ async def check_text(payload: TextRequest):
         print(f"📅 /check-text called at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         texts = payload.texts
         if not texts:
-            print("⚠️ No texts received.")
-            return []
+            return JSONResponse(status_code=400, content={"error": "No texts provided."})
 
         available_mb = psutil.virtual_memory().available / 1024 / 1024
         print(f"🧠 Available memory: {available_mb:.2f} MB")
