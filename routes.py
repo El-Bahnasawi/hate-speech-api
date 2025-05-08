@@ -15,7 +15,7 @@ def register_routes(app):
             texts,
             padding=True,
             truncation=True,
-            max_length=128,
+            max_length=70,
             return_tensors="pt"
         ).to(DEVICE)
 
@@ -28,6 +28,7 @@ def register_routes(app):
             for s in scores
         ]
 
+        print("🚀 Inference results:", results)
         log_to_db(texts, results)
         return jsonify(results)
 
