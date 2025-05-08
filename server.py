@@ -1,16 +1,12 @@
-import os
 import torch
-import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import wandb
-from dotenv import load_dotenv
+from supabase import create_client, Client
+import os
 
-# Load environment variables
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+# Setup device
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model from Weights & Biases
@@ -28,27 +24,25 @@ model.eval()
 app = Flask(__name__)
 CORS(app)
 
-# Supabase logging using REST API
+
+from dotenv import load_dotenv
+
+# Load env variables from a .env file
+load_dotenv()
+
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
+
+# Logging using Supabase Python client
 def log_to_db(texts, results):
-    url = f"{SUPABASE_URL}/rest/v1/cases"
-    headers = {
-        "apikey": SUPABASE_API_KEY,
-        "Authorization": f"Bearer {SUPABASE_API_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-
-    data = [
-        {"text": text, "blur": result["blur"], "score": result["score"]}
-        for text, result in zip(texts, results)
-    ]
-
     try:
-        response = requests.post(url, json=data, headers=headers)
-        if response.status_code in (200, 201, 204):
-            print("📥 Logged to Supabase via REST.")
-        else:
-            print(f"❌ Supabase log failed ({response.status_code}):", response.text)
+        data = [
+            {"text": text, "blur": result["blur"], "score": result["score"]}
+            for text, result in zip(texts, results)
+        ]
+        supabase.table("cases").insert(data).execute()
+        print("📥 Logged to Supabase via Python client.")
     except Exception as e:
         print("❌ Exception during Supabase logging:", e)
 
@@ -83,7 +77,7 @@ def check_text():
 def test_db():
     try:
         log_to_db(["Test from /test-db"], [{"blur": False, "score": 0.1111}])
-        return jsonify({"status": "✅ Logged test row via REST."})
+        return jsonify({"status": "✅ Logged test row via supabase-py."})
     except Exception as e:
         return jsonify({"error": str(e)})
 
