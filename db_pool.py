@@ -1,29 +1,26 @@
-import psycopg2
-from psycopg2 import pool
+import asyncpg
 import os
 from dotenv import load_dotenv
-import sys
 
 load_dotenv()
 
-try:
-    print("🔌 Creating PostgreSQL connection pool...")
-    db_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
+db_pool = None
+
+async def init_db_pool():
+    global db_pool
+    print("🔌 Creating PostgreSQL async connection pool...")
+    db_pool = await asyncpg.create_pool(
         user=os.getenv("user"),
         password=os.getenv("password"),
+        database=os.getenv("dbname"),
         host=os.getenv("host"),
         port=os.getenv("port"),
-        dbname=os.getenv("dbname"),
-        sslmode="require"
+        ssl="require"
     )
-    if db_pool:
-        print("✅ Connection pool created successfully!")
-    else:
-        print("❌ Pool returned None. Exiting.")
-        sys.exit(1)
+    print("✅ Async connection pool created!")
 
-except Exception as e:
-    print("❌ Failed to create connection pool:", e)
-    sys.exit(1)
+async def close_db_pool():
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        print("🧹 DB pool closed.")
