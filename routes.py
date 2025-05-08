@@ -2,6 +2,7 @@ from flask import request, jsonify
 from model_loader import tokenizer, model, DEVICE
 from logger import log_to_db
 import torch
+import psutil
 
 def register_routes(app):
 
@@ -13,6 +14,10 @@ def register_routes(app):
             if not texts:
                 print("⚠️ No texts received.")
                 return jsonify([])
+
+            # 🧠 Log available memory
+            available_mb = psutil.virtual_memory().available / 1024 / 1024
+            print(f"🧠 Available memory: {available_mb:.2f} MB")
 
             try:
                 encodings = tokenizer(
