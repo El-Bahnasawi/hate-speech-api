@@ -1,39 +1,34 @@
 # logger.py
-"""
-Fire-and-forget bulk insert so the API never blocks on DB hiccups.
-"""
-
 import asyncio, traceback
 import db_pool
 
-_LOG_TIMEOUT = 5   # seconds to finish the insert
+_LOG_TIMEOUT = 5   # seconds per bulk insert
 
 async def _insert(values):
-    pool = db_pool.pool
+    pool = db_pool.get_pool() 
     if not pool:
-        print("⚠️  DB pool not ready")
-        return
-
+        raise RuntimeError("DB pool not ready")
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.executemany(
-                "INSERT INTO cases(text, blur, score) VALUES($1,$2,$3)",
-                values,
+                "INSERT INTO cases(text, blur, score) VALUES($1,$2,$3)", values
             )
-    print(f"✅ Bulk inserted {len(values)} rows")
 
-def log_to_db(texts, results):
-    """Schedule insert but never await it."""
-    values = [(t, r["blur"], r["score"]) for t, r in zip(texts, results)]
-    if not values:
-        return
+async def _safe_insert(values):
     try:
-        task = asyncio.create_task(
-            asyncio.wait_for(_insert(values), _LOG_TIMEOUT)
-        )
-        task.add_done_callback(
-            lambda t: t.exception() and print("❌ Logging failed:", t.exception())
-        )
+        await asyncio.wait_for(_insert(values), timeout=_LOG_TIMEOUT)
+        print(f"✅ Bulk inserted {len(values)} rows")
+        return True
     except Exception as e:
-        print("❌ Failed to schedule DB log:", e)
+        print("❌ Logging failed:", e)
         traceback.print_exc()
+        return False
+
+def log_to_db(texts, results) -> asyncio.Task:
+    """
+    Fire-and-forget insert; returns a Task the caller can await if it
+    wants the success flag.
+    """
+    values = [(t, r["blur"], r["score"]) for t, r in zip(texts, results)]
+    loop = asyncio.get_event_loop()
+    return loop.create_task(_safe_insert(values))

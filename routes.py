@@ -33,13 +33,20 @@ async def check_text(payload: TextRequest):
     if not payload.texts:
         raise HTTPException(400, "No texts provided")
 
-    ts = datetime.utcnow().isoformat(timespec="seconds")
     scores = await asyncio.get_event_loop().run_in_executor(
         EXECUTOR, partial(_predict, payload.texts)
     )
     results = [{"blur": s >= 0.5, "score": round(s, 4)} for s in scores]
 
-    # Fire-and-forget logging
-    log_to_db(payload.texts, results)
+    # schedule insert and wait up to 0.1 s for the flag
+    db_task   = log_to_db(payload.texts, results)
+    try:
+        db_logged = await asyncio.wait_for(db_task, timeout=0.1)
+    except asyncio.TimeoutError:
+        db_logged = False      # DB still working; don’t block the response
 
-    return {"timestamp": ts, "results": results}
+    return {
+        "timestamp": datetime.utcnow().isoformat(timespec="seconds"),
+        "results":   results,
+        "db_logged": db_logged,
+    }

@@ -19,7 +19,7 @@ async def init_db_pool():
     _pool = await asyncpg.create_pool(
         dsn=DB_URL,
         min_size=1,
-        max_size=2,          # free tier ≈ low concurrency
+        max_size=5,          # free tier ≈ low concurrency
         timeout=30,          # seconds to obtain a connection
         command_timeout=60,  # per-statement timeout
     )
@@ -31,7 +31,6 @@ async def close_db_pool():
         await _pool.close()
         _pool = None
 
-# Convenience for other modules
-@property
-def pool():
+def get_pool():          # ✅ simple function instead of @property
+    """Return the global asyncpg pool (or None if not ready)."""
     return _pool
