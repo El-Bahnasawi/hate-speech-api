@@ -4,6 +4,7 @@ import db_pool
 
 _LOG_TIMEOUT = 5   # seconds per bulk insert
 
+
 async def _insert(values):
     pool = db_pool.get_pool() 
     if not pool:
