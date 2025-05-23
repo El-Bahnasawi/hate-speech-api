@@ -4,6 +4,6 @@ torch
 transformers
 wandb
 python-dotenv
-asyncpg
+psycopg2-binary
 emoji
 psutil
