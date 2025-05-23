@@ -1,3 +1,4 @@
+# Revised model_loader.py (unchanged as sync)
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import wandb
@@ -5,11 +6,10 @@ import os
 import sys
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 tokenizer = None
 model = None
 
-async def load_model():
+def load_model_sync():
     global tokenizer, model
 
     try:

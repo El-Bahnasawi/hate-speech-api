@@ -1,36 +1,26 @@
-# db_pool.py
-"""
-Singleton asyncpg pool.
-Creates exactly one pool on startup, closes it gracefully on shutdown.
-"""
-
+# Revised db_pool.py (sync using psycopg2)
 import os
-import asyncpg
+import psycopg2
+from psycopg2 import pool
 
-DB_URL = os.getenv("DATABASE_URL")         # must include ?sslmode=require
-_pool   = None                             # type: asyncpg.Pool | None
+DB_URL = os.getenv("DATABASE_URL")
+_pool = None
 
-async def init_db_pool():
-    """Call once from FastAPI's startup event."""
+def init_db_pool_sync():
     global _pool
-    if _pool is not None:
-        return
-
-    _pool = await asyncpg.create_pool(
-        dsn=DB_URL,
-        min_size=1,
-        max_size=5,          # free tier ≈ low concurrency
-        timeout=30,          # seconds to obtain a connection
-        command_timeout=60,  # per-statement timeout
+    _pool = psycopg2.pool.SimpleConnectionPool(
+        1, 5, dsn=DB_URL
     )
-    print("✅ DB pool ready")
+    if _pool:
+        print("✅ DB pool ready")
 
-async def close_db_pool():
+def close_db_pool_sync():
     global _pool
     if _pool:
-        await _pool.close()
+        _pool.closeall()
         _pool = None
 
-def get_pool():          # ✅ simple function instead of @property
-    """Return the global asyncpg pool (or None if not ready)."""
-    return _pool
+def get_conn():
+    if not _pool:
+        raise RuntimeError("DB pool not initialized")
+    return _pool.getconn()
